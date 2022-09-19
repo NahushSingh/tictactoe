@@ -9,6 +9,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = "xyz123"
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*",
+                    host='0.0.0.0', port=5000,
                     # logger=True, engineio_logger=True, ping_timeout=5, ping_interval=10
                     )
 
