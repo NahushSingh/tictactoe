@@ -1,7 +1,7 @@
 import os
 
-from flask import Flask, send_from_directory
-from flask_socketio import SocketIO, emit, join_room, close_room
+from flask import Flask, send_from_directory, request
+from flask_socketio import SocketIO, emit, join_room, close_room, leave_room
 from flask_cors import CORS
 from game import Game
 
@@ -10,7 +10,8 @@ app.config['SECRET_KEY'] = "xyz123"
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*",
                     host='0.0.0.0', port=5000,
-                    # logger=True, engineio_logger=True, ping_timeout=5, ping_interval=10
+                    # logger=True, engineio_logger=True,
+                    # ping_timeout=5, ping_interval=10
                     )
 
 
@@ -26,10 +27,10 @@ def home(path):
 @socketio.on('player_detail')
 def on_player_enter(data):
     if not Game.room_available(data["room"]):
-        player = Game.create_room(data["user"], data["room"])
+        player = Game.create_room(data["user"], data["room"], request.sid)
         emit("player_detail", player)
     elif not Game.room_full(data["room"]):
-        player = Game.join_room(data["user"], data["room"])
+        player = Game.join_room(data["user"], data["room"], request.sid)
         emit("player_detail", player)
         emit("opponent_detail", {"opponent": player}, broadcast=True, include_self=False, room=data["room"])
         emit("opponent_detail", {"opponent": Game.get_opponent(data["room"], player["token"])})
@@ -51,6 +52,7 @@ def on_move(data):
 
 @socketio.on("play_again")
 def play_again(data):
+    Game.game_reset(data["room"])
     emit("play_req", Game.get_opponent(data["room"], data["token"]), include_self=False, room=data["room"])
 
 
@@ -62,9 +64,12 @@ def accept(data):
 
 @socketio.on('continue_old_session')
 def on_continue(data):
+    print(data)
     if Game.room_available(data["room"]) and Game.match_credential(data["room"], data["token"]):
+        player = Game.re_join(request.sid, data["token"])
         join_room(data["room"])
-        emit('opponent_detail', {"opponent": Game.get_opponent(data["room"], data["token"]),
+        emit("player_detail", player)
+        emit('opponent_detail', {"opponent": Game.get_opponent(data["room"], request.sid),
                                  "board": {"data": Game.games[data["room"]].board,
                                            "turn": Game.games[data["room"]].turn}})
         if Game.over(data["room"]):
@@ -83,8 +88,14 @@ def on_disconnect(data):
     opponent = Game.get_opponent(data["room"], data["token"])
     emit("player_left", {"player": opponent, "opponent": player},
          broadcast=True, room=data["room"], include_self=False)
-    Game.remove(data["room"])
+    Game.remove(room=data["room"])
     close_room(data["room"])
+
+
+@socketio.on("disconnect")
+def disconnect():
+    room = Game.room.get(request.sid, "")
+    leave_room(room)
 
 
 if __name__ == "__main__":

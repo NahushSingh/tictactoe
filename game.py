@@ -1,15 +1,16 @@
 from random import shuffle
-from uuid import uuid4
 
 
 class Game:
     games = {}
+    room = {}
 
     @classmethod
-    def create_room(cls, username, room):
+    def create_room(cls, username, room, sid):
         if not cls.games.get(room, False):
-            g = cls(username, room)
+            g = cls(username, room, sid)
             cls.games[room] = g
+            cls.room[sid] = room
             return {**g.player_detail[1], "room": room}
 
     @classmethod
@@ -21,14 +22,25 @@ class Game:
         return True if cls.games[room].player_detail.get(2, False) else False
 
     @classmethod
-    def join_room(cls, username, room):
+    def join_room(cls, username, room, sid):
         cls.games[room].player_detail[2] = {
             "username": username,
-            "token": str(uuid4()),
+            "token": str(sid),
             "symbol": cls.games[room].symbols[1],
             "score": 0
         }
+        cls.room[sid] = room
         return {**cls.games[room].player_detail[2], "room": cls.games[room].room}
+
+    @classmethod
+    def re_join(cls, new_sid, old_sid):
+        room = cls.room[old_sid]
+        if cls.games[room].player_detail[1]["token"] == old_sid:
+            cls.games[room].player_detail[1]["token"] = new_sid
+            return cls.games[room].player_detail[1]
+        elif cls.games[room].player_detail[2]["token"] == old_sid:
+            cls.games[room].player_detail[2]["token"] = new_sid
+            return cls.games[room].player_detail[2]
 
     @classmethod
     def match_credential(cls, room, token):
@@ -48,20 +60,18 @@ class Game:
 
     @classmethod
     def get_player(cls, room, token):
-        if cls.games[room].player_detail[1]["token"] == token:
-            return cls.games[room].player_detail[1]
-        elif cls.games[room].player_detail[2]["token"] == token:
-            return cls.games[room].player_detail[1]
+        return cls.games[room].player(token)
 
     @classmethod
-    def remove(cls, room):
-        print(room)
-        cls.games.pop(room)
+    def remove(cls, room=""):
+        if room:
+            cls.games.pop(room)
 
     @classmethod
     def update_game(cls, room, pos, symbol):
-        next_player = cls.games[room].update_board(symbol, pos)
-        return {"room": room, "pos": pos, "symbol": symbol, "turn": next_player}
+        if not cls.games[room].game_over:
+            next_player = cls.games[room].update_board(symbol, pos)
+            return {"room": room, "pos": pos, "symbol": symbol, "turn": next_player}
 
     @classmethod
     def over(cls, room):
@@ -72,10 +82,14 @@ class Game:
         return cls.games[room].get_winner()
 
     @classmethod
-    def replay(cls, room):
+    def game_reset(cls, room):
         cls.games[room].reset()
 
-    def __init__(self, username, room):
+    @classmethod
+    def replay(cls, room):
+        cls.games[room].game_over = False
+
+    def __init__(self, username, room, sid):
         self.turn = "O"
         self.room = room
         self.strike = []
@@ -94,7 +108,7 @@ class Game:
         self.player_detail = {
             1: {
                 "username": username,
-                "token": str(uuid4()),
+                "token": str(sid),
                 "symbol": self.symbols[0],
                 "score": 0
             }
@@ -140,10 +154,15 @@ class Game:
 
         return self.turn
 
+    def player(self, token):
+        if self.player_detail[1]["token"] == token:
+            return self.player_detail[1]
+        elif self.player_detail[2]["token"] == token:
+            return self.player_detail[1]
+
     def reset(self):
         for pos in range(9):
             self.board[pos]["symbol"] = "-"
-        self.game_over = False
         self.winner = -1
         self.empty_pos = 9
         self.strike = []
