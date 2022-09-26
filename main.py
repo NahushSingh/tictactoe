@@ -64,7 +64,6 @@ def accept(data):
 
 @socketio.on('continue_old_session')
 def on_continue(data):
-    print(data)
     if Game.room_available(data["room"]) and Game.match_credential(data["room"], data["token"]):
         player = Game.re_join(request.sid, data["token"])
         join_room(data["room"])
